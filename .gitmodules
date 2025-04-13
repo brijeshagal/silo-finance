@@ -1,0 +1,3 @@
+[submodule "lib/silo-contracts-v2"]
+	path = lib/silo-contracts-v2
+	url = https://github.com/silo-finance/silo-contracts-v2
