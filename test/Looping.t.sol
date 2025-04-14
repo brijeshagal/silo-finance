@@ -11,47 +11,55 @@ contract LoopingTest is Test {
     ERC20 public token0 = ERC20(0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38);
     // USDC
     ERC20 public token1 = ERC20(0x29219dd400f2Bf60E5a23d13Be72B486D4038894);
+
     Silo public silo0 =
-        Silo(payable(0xf55902DE87Bd80c6a35614b48d7f8B612a083C12));
+        Silo(payable(0xf55902DE87Bd80c6a35614b48d7f8B612a083C12)); // SONIC silo
     Silo public silo1 =
-        Silo(payable(0x322e1d5384aa4ED66AeCa770B95686271de61dc3));
+        Silo(payable(0x322e1d5384aa4ED66AeCa770B95686271de61dc3)); // USDC silo
 
     ISiloConfig public marketConfig =
         ISiloConfig(0x062A36Bbe0306c2Fd7aecdf25843291fBAB96AD2);
 
     address USDC_WHALE = 0x578Ee1ca3a8E1b54554Da1Bf7C583506C4CD11c6;
 
-    function testDeposit() public {
-        // address USER = address(0x1);
+    uint256 public MIN_BORROW_THRESHOLD = 100 * 1e18; // 100 Sonic
 
+    function testLeveragedLooping() public {
         vm.deal(USDC_WHALE, 1000 ether);
-
-        // Approve token1 (USDC) to the silo1
         approveTokens(USDC_WHALE, address(silo1), address(token1));
+        // approveTokens(USDC_WHALE, address(silo0), address(token0));
 
-        uint256 _borrowableAmount = silo0.maxBorrowShares(USDC_WHALE);
-        console.log("Max borrowable amount before deposit: ", _borrowableAmount);
+        // Initial deposit 1M $USDC
+        depositIntoSilo(USDC_WHALE, silo1, 1000000 * token1.decimals());
 
-        // Deposit token1 into silo (USDC)
-        depositIntoSilo(
-            USDC_WHALE,
-            silo1,
-            (10 ** 6) * (10 ** token1.decimals())
-        );
+        uint256 loopCount = 0;
+        while (true) {
+            uint256 borrowable = silo0.maxBorrowShares(USDC_WHALE);
+            console.log("Borrowable SONIC: ", borrowable);
 
-        // Get max borrowable amount for token0
-        uint256 borrowableAmount = silo0.maxBorrowShares(USDC_WHALE);
-        console.log("Max borrowable amount after deposit: ", borrowableAmount);
+            if (borrowable < MIN_BORROW_THRESHOLD) {
+                console.log("Borrowable amount below threshold. Exiting loop.");
+                break;
+            }
 
-        // Borrow token0 into silo (SONIC)
-        borrowFromSilo(USDC_WHALE, silo0, borrowableAmount);
+            borrowFromSilo(USDC_WHALE, silo0, borrowable);
+            uint256 sonicBalance = token0.balanceOf(USDC_WHALE);
 
-        uint256 borrowableAmountAfterBorrow = silo0.maxBorrowShares(USDC_WHALE);
-        console.log("Max borrowable amount after borrow: ", borrowableAmountAfterBorrow);
+            console.log("Borrowed SONIC: ", sonicBalance);
 
-        uint sonicBalance = token0.balanceOf(USDC_WHALE);
-        console.log("Sonic balance after borrow: ", sonicBalance);
+            // Swap Sonic -> USDC (stub) @TODO implement later
+            uint256 usdcReceived = swapSonicToUSDC(USDC_WHALE, sonicBalance);
 
+            console.log("USDC received after swap: ", usdcReceived);
+
+            depositIntoSilo(USDC_WHALE, silo1, usdcReceived);
+
+            loopCount++;
+            console.log("Loop count: ", loopCount);
+        }
+
+        console.log("Final SONIC balance: ", token0.balanceOf(USDC_WHALE));
+        console.log("Final USDC balance: ", token1.balanceOf(USDC_WHALE));
     }
 
     function approveTokens(address owner, address to, address token) internal {
@@ -78,5 +86,21 @@ contract LoopingTest is Test {
         vm.startPrank(borrower);
         silo.borrow(amount, borrower, borrower);
         vm.stopPrank();
+    }
+
+    // Stub function to simulate Sonic -> USDC swap
+    function swapSonicToUSDC(
+        address user,
+        uint256 sonicAmount
+    ) internal returns (uint256 usdcReceived) {
+        vm.startPrank(user);
+
+        // Burn Sonic and mint USDC (mock)
+        token0.transfer(address(0xdead), sonicAmount);
+        uint256 mockedUSDC = sonicAmount / 1e12; // Convert 18 -> 6 decimals
+        deal(address(token1), user, token1.balanceOf(user) + mockedUSDC);
+
+        vm.stopPrank();
+        return mockedUSDC;
     }
 }
