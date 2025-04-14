@@ -16,5 +16,5 @@ Run the Looping script file (`Looping.s.sol`).
 
 
 ```bash
-forge script ./script/Looping.s.sol --fork-url $SONIC_RPC -- --vvvv
+forge test --fork-url $SONIC_RPC  -vvv
 ```
